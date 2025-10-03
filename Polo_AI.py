@@ -8,6 +8,10 @@ import sys
 import pyautogui
 import ollama
 import time
+import subprocess
+
+
+#_______________________________________________________________________________________________________
 
 # def ai_response(prompt: str) -> str:
 #     try:
@@ -21,44 +25,132 @@ import time
 #     except Exception as e:
 #         return f"Error talking to Ollama: {e}"
 
+# def ai_response(prompt: str) -> str:
+#     try:
+#         response = ollama.chat(
+#             model="phi3",
+#             messages=[{"role": "user", "content": prompt}]
+#         )
+#         # Handle both formats: single "message" or list of "messages"
+#         if "message" in response and "content" in response["message"]:
+#             return response["message"]["content"]
+#         elif "messages" in response and isinstance(response["messages"], list):
+#             return response["messages"][-1].get("content", "")
+#         else:
+#             return str(response)
+#     except Exception as e:
+#         return f"Error talking to Ollama: {e}"
+
+# def ai_response(prompt: str) -> str:
+#     try:
+#         response = ollama.chat(
+#             model="phi3",
+#             messages=[{"role": "user", "content": prompt}]
+#         )
+
+#         print("Raw Ollama Response:", response)
+
+#         if isinstance(response, dict):
+#             if "message" in response and "content" in response["message"]:
+#                 return response["message"]["content"]
+#             elif "messages" in response and isinstance(response["messages"], list):
+#                 return response["messages"][-1].get("content", "")
+#         return str(response)
+
+#     except Exception as e:
+#         return f"Error talking to Ollama: {e}"
+
 def ai_response(prompt: str) -> str:
     try:
         response = ollama.chat(
             model="phi3",
             messages=[{"role": "user", "content": prompt}]
         )
-        # Handle both formats: single "message" or list of "messages"
-        if "message" in response and "content" in response["message"]:
-            return response["message"]["content"]
-        elif "messages" in response and isinstance(response["messages"], list):
-            return response["messages"][-1].get("content", "")
-        else:
-            return str(response)
+
+        print("Raw Ollama Response:", response)
+
+        # Case 1: If response has a .message attribute (object style)
+        if hasattr(response, "message"):
+            msg = response.message
+            if hasattr(msg, "content"):
+                return msg.content
+
+        # Case 2: If response is dict-like
+        if isinstance(response, dict):
+            if "message" in response:
+                msg = response["message"]
+                if isinstance(msg, dict) and "content" in msg:
+                    return msg["content"]
+                if hasattr(msg, "content"):
+                    return msg.content
+            elif "messages" in response:
+                messages = response["messages"]
+                if isinstance(messages, list) and messages:
+                    last = messages[-1]
+                    if isinstance(last, dict) and "content" in last:
+                        return last["content"]
+                    if hasattr(last, "content"):
+                        return last.content
+
+        # If nothing else worked, fallback
+        return "I understood your question, but couldn’t extract a proper answer."
+
     except Exception as e:
         return f"Error talking to Ollama: {e}"
-    
+
+
+#_______________________________________________________________________________________________________
+
     
 engine = pyttsx3.init()
 voices = engine.getProperty('voices')
 engine.setProperty('voice', voices[7].id)  
 
-def say(text , voice = "Fred"):
-    if not text:
-        return
-    print("Speaking:", text[:80], "..." if len(text) > 80 else "")
-    engine.say(text)
-    engine.runAndWait()
+# def say(text):
+#     if not text:
+#         return
+#     print("Speaking:", text[:80], "..." if len(text) > 80 else "")
+#     engine.say(text)
+#     engine.runAndWait()
 
-def say_AI(text, voice="Fred"):
-    if not text:
-        return
-    print("Speaking:", text[:80], "..." if len(text) > 80 else "")
-    os.system(f'say -v "{voice}" "{text}"')
+
+
+
+# def say_AI(text, voice="Fred"):
+#     if not text:
+#         return
+#     print("Speaking:", text[:80], "..." if len(text) > 80 else "")
+#     engine.say(text)
+#     engine.runAndWait()
+
+    # print("Speaking:", text[:80], "..." if len(text) > 80 else "")
+    # os.system(f'say -v "{voice}" "{text}"')
 
 
 # def say(text):
 #     engine.say(text)
 #     engine.runAndWait()
+
+
+def say(text, max_sentences=None):
+    if not text:
+        return
+
+    # Optional trimming for very long text
+    if max_sentences:
+        sentences = text.replace("\n", " ").split(". ")
+        text = ". ".join(sentences[:max_sentences]).strip()
+
+    print("Speaking (truncated):", text[:120], "..." if len(text) > 120 else "")
+
+    try:
+        # Use macOS system TTS
+        subprocess.run(['say', text])
+        time.sleep(0.15)  # short pause to avoid overlapping with microphone
+    except Exception as e:
+        print("Error speaking with system 'say':", e)
+
+#____________________________________________________________________________
 
 
 def take_command():
@@ -113,6 +205,8 @@ def processCommand(text):
         return False  
     return True  
 
+#_______________________________________________________________________________________________________
+
 
 # def stop():
 #     engine.say("Goodbye, shutting down.")
@@ -120,10 +214,16 @@ def processCommand(text):
 #     time.sleep(0.3)       # let audio driver flush
 #     sys.exit(0)
 
+# def stop():
+#     os.system('say "Goodbye, shutting down."')  # macOS system TTS
+#     sys.exit(0)
+
 def stop():
-    os.system('say "Goodbye, shutting down."')  # macOS system TTS
+    say("Goodbye, shutting down.")
     sys.exit(0)
 
+
+#_______________________________________________________________________________________________________
 
 
 if __name__ == '__main__':
@@ -191,8 +291,16 @@ if __name__ == '__main__':
         if not handled:
             handled = processCommand(query)
 
+        # if not handled:
+        #     reply = ai_response(query)
+        #     print("AI Response:", reply)
+        #     say(reply)
+
         if not handled:
             reply = ai_response(query)
             print("AI Response:", reply)
-            say_AI(reply)
+
+            speech_text = reply.replace("*", "").replace("#", "").replace("`", "")
+            
+            say(speech_text, max_sentences=2)
 
